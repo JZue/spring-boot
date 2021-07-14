@@ -292,11 +292,18 @@ public class SpringApplication {
 	 * @return a running {@link ApplicationContext}
 	 */
 	public ConfigurableApplicationContext run(String... args) {
+		//  StopWatch 是org.springframework.util包下的一个小工具，
+		//  用于对程序部分代码进行计时(ms级别)，适用于同步单线程代码块，里面就是简单的几个方法，没有复杂逻辑
+		//  https://blog.csdn.net/gxs1688/article/details/87185030
 		StopWatch stopWatch = new StopWatch();
 		stopWatch.start();
+
 		ConfigurableApplicationContext context = null;
 		Collection<SpringBootExceptionReporter> exceptionReporters = new ArrayList<>();
+		//java.awt.headless是J2SE的一种模式用于在缺少显示屏、键盘或者鼠标时的系统配置，
+		// 很多监控工具如jconsole 需要将该值设置为true，系统变量默认为true
 		configureHeadlessProperty();
+		// 第一步：获取并启动监听器。详解请看getRunListeners注释
 		SpringApplicationRunListeners listeners = getRunListeners(args);
 		listeners.starting();
 		try {
@@ -402,6 +409,13 @@ public class SpringApplication {
 				System.getProperty(SYSTEM_PROPERTY_JAVA_AWT_HEADLESS, Boolean.toString(this.headless)));
 	}
 
+	/**
+	 * @param args 参数就是启动参数
+	 * @return 返回值SpringApplicationRunListeners  本质上是SpringApplicationRunListener的一个集合，加上Log日志对象
+	 *
+	 * 逻辑上，getSpringFactoriesInstances ： 获取META-INF/spring.factories中的类型SpringApplicationRunListener的所有className
+	 *  然后实例化
+	 */
 	private SpringApplicationRunListeners getRunListeners(String[] args) {
 		Class<?>[] types = new Class<?>[] { SpringApplication.class, String[].class };
 		return new SpringApplicationRunListeners(logger,
@@ -412,6 +426,13 @@ public class SpringApplication {
 		return getSpringFactoriesInstances(type, new Class<?>[] {});
 	}
 
+	/**
+	 * @param type 从 spring.factories 中获取此类型的class
+	 * @param parameterTypes 实例化时，获取构造方法用的参数类型集合
+	 * @param args 构造方法实例化对象时的参数
+	 * @param <T> 具体的类型
+	 * @return 返回的是spring.factories 中获取此类型的class的实例化对象的集合
+	 */
 	private <T> Collection<T> getSpringFactoriesInstances(Class<T> type, Class<?>[] parameterTypes, Object... args) {
 		ClassLoader classLoader = getClassLoader();
 		// Use names and ensure unique to protect against duplicates
@@ -430,6 +451,9 @@ public class SpringApplication {
 				Class<?> instanceClass = ClassUtils.forName(name, classLoader);
 				Assert.isAssignable(type, instanceClass);
 				Constructor<?> constructor = instanceClass.getDeclaredConstructor(parameterTypes);
+				// 里面判断是否是cotlin，否则走kontlin的构造方法，
+				//
+				// 没有其他逻辑了
 				T instance = (T) BeanUtils.instantiateClass(constructor, args);
 				instances.add(instance);
 			}
