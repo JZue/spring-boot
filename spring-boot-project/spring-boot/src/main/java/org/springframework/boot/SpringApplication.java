@@ -291,6 +291,7 @@ public class SpringApplication {
 	 * @param args the application arguments (usually passed from a Java main method)
 	 * @return a running {@link ApplicationContext}
 	 */
+	// https://www.cnblogs.com/hello-shf/p/10992377.html
 	public ConfigurableApplicationContext run(String... args) {
 		//  StopWatch 是org.springframework.util包下的一个小工具，
 		//  用于对程序部分代码进行计时(ms级别)，适用于同步单线程代码块，里面就是简单的几个方法，没有复杂逻辑
@@ -303,24 +304,37 @@ public class SpringApplication {
 		//java.awt.headless是J2SE的一种模式用于在缺少显示屏、键盘或者鼠标时的系统配置，
 		// 很多监控工具如jconsole 需要将该值设置为true，系统变量默认为true
 		configureHeadlessProperty();
-		// 第一步：获取并启动监听器。详解请看getRunListeners注释
+		// 获取并启动监听器。详解请看getRunListeners注释
+		// SpringApplicationRunListeners 是一个SpringApplicationRunListener的批量管理类
 		SpringApplicationRunListeners listeners = getRunListeners(args);
 		listeners.starting();
 		try {
+			// ApplicationArguments:Provides access to the arguments that were used to run a {@link SpringApplication}.
+			// ApplicationArguments:提供解析好的SpringApplication#run的参数
 			ApplicationArguments applicationArguments = new DefaultApplicationArguments(args);
+			// 创建运行环境environment，创建当前SpringBoot应用要使用的environment
 			ConfigurableEnvironment environment = prepareEnvironment(listeners, applicationArguments);
+			// 处理需要忽略的Bean
 			configureIgnoreBeanInfo(environment);
+			// 打印banner
 			Banner printedBanner = printBanner(environment);
+			// 初始化应用上下文
 			context = createApplicationContext();
+			//实例化SpringBootExceptionReporter.class，用来支持报告关于启动的错误
 			exceptionReporters = getSpringFactoriesInstances(SpringBootExceptionReporter.class,
 					new Class[] { ConfigurableApplicationContext.class }, context);
+			// 刷新应用上下文前的准备阶段
 			prepareContext(context, environment, listeners, applicationArguments, printedBanner);
+			//5、刷新应用上下文
 			refreshContext(context);
+			//刷新应用上下文后的扩展接口
 			afterRefresh(context, applicationArguments);
+			//时间记录停止
 			stopWatch.stop();
 			if (this.logStartupInfo) {
 				new StartupInfoLogger(this.mainApplicationClass).logStarted(getApplicationLog(), stopWatch);
 			}
+			//发布容器启动完成事件
 			listeners.started(context);
 			callRunners(context, applicationArguments);
 		}
@@ -342,9 +356,13 @@ public class SpringApplication {
 	private ConfigurableEnvironment prepareEnvironment(SpringApplicationRunListeners listeners,
 			ApplicationArguments applicationArguments) {
 		// Create and configure the environment
+		// 是Servlet or reactive or other
 		ConfigurableEnvironment environment = getOrCreateEnvironment();
+		// 配置环境 PropertySources Profile ConversionService(转换服务)
 		configureEnvironment(environment, applicationArguments.getSourceArgs());
+		// 环境准备
 		listeners.environmentPrepared(environment);
+		// 将环境绑定到SpringApplication
 		bindToSpringApplication(environment);
 		if (!this.isCustomEnvironment) {
 			environment = new EnvironmentConverter(getClassLoader()).convertEnvironmentIfNecessary(environment,
@@ -367,17 +385,22 @@ public class SpringApplication {
 
 	private void prepareContext(ConfigurableApplicationContext context, ConfigurableEnvironment environment,
 			SpringApplicationRunListeners listeners, ApplicationArguments applicationArguments, Banner printedBanner) {
+		//设置容器环境
 		context.setEnvironment(environment);
+		//执行容器后置处理
 		postProcessApplicationContext(context);
+		//执行容器中的 ApplicationContextInitializer 包括spring.factories和通过三种方式自定义的
 		applyInitializers(context);
+		//向各个监听器发送容器已经准备好的事件
 		listeners.contextPrepared(context);
 		if (this.logStartupInfo) {
 			logStartupInfo(context.getParent() == null);
 			logStartupProfileInfo(context);
 		}
-		// Add boot specific singleton beans
+		//将main函数中的args参数封装成单例Bean，注册进容器
 		ConfigurableListableBeanFactory beanFactory = context.getBeanFactory();
 		beanFactory.registerSingleton("springApplicationArguments", applicationArguments);
+		//将 printedBanner 也封装成单例，注册进容器
 		if (printedBanner != null) {
 			beanFactory.registerSingleton("springBootBanner", printedBanner);
 		}
@@ -388,7 +411,13 @@ public class SpringApplication {
 		// Load the sources
 		Set<Object> sources = getAllSources();
 		Assert.notEmpty(sources, "Sources must not be empty");
+
+		// 加载应用的启动类(非web环境，servlet，reactive如下三个常量对应的类)，并注入到容器中,
+		//	public static final String DEFAULT_CONTEXT_CLASS
+		//	public static final String DEFAULT_SERVLET_WEB_CONTEXT_CLASS
+		//	public static final String DEFAULT_REACTIVE_WEB_CONTEXT_CLASS
 		load(context, sources.toArray(new Object[0]));
+		// 发布容器已加载事件
 		listeners.contextLoaded(context);
 	}
 
@@ -435,13 +464,17 @@ public class SpringApplication {
 	 */
 	private <T> Collection<T> getSpringFactoriesInstances(Class<T> type, Class<?>[] parameterTypes, Object... args) {
 		ClassLoader classLoader = getClassLoader();
-		// Use names and ensure unique to protect against duplicates
+		// 从 spring.factories 中获取对应类型的不重复的names
 		Set<String> names = new LinkedHashSet<>(SpringFactoriesLoader.loadFactoryNames(type, classLoader));
+		// 实例化
 		List<T> instances = createSpringFactoriesInstances(type, parameterTypes, classLoader, args, names);
 		AnnotationAwareOrderComparator.sort(instances);
 		return instances;
 	}
 
+	// 根据classname 获取构造Class信息
+	// 然后根据参数类型获取构造方法
+	// 最后根据参数和构造方法实例化
 	@SuppressWarnings("unchecked")
 	private <T> List<T> createSpringFactoriesInstances(Class<T> type, Class<?>[] parameterTypes,
 			ClassLoader classLoader, Object[] args, Set<String> names) {
@@ -451,9 +484,7 @@ public class SpringApplication {
 				Class<?> instanceClass = ClassUtils.forName(name, classLoader);
 				Assert.isAssignable(type, instanceClass);
 				Constructor<?> constructor = instanceClass.getDeclaredConstructor(parameterTypes);
-				// 里面判断是否是cotlin，否则走kontlin的构造方法，
-				//
-				// 没有其他逻辑了
+				// 里面判断是否是Kotlin，是则走Kotlin的构造方法，否则通过正常构造方法，和构造方法参数生成实例。没有其他逻辑了
 				T instance = (T) BeanUtils.instantiateClass(constructor, args);
 				instances.add(instance);
 			}
@@ -464,6 +495,9 @@ public class SpringApplication {
 		return instances;
 	}
 
+	/**
+	 * this.webApplicationType 在构造方法里就已经获取到了
+	 */
 	private ConfigurableEnvironment getOrCreateEnvironment() {
 		if (this.environment != null) {
 			return this.environment;
@@ -490,8 +524,12 @@ public class SpringApplication {
 	 * @see #configurePropertySources(ConfigurableEnvironment, String[])
 	 */
 	protected void configureEnvironment(ConfigurableEnvironment environment, String[] args) {
+		// 是否需要添加转换服务
+		// https://blog.csdn.net/gameover8080/article/details/102952390
 		if (this.addConversionService) {
 			ConversionService conversionService = ApplicationConversionService.getSharedInstance();
+			// 设置属性转换服务，比如：集合转数组、集合转对象......，很显然是为了在赋值属性值的时候转换成合适的类型绑定
+			// conversionService在初始化时就有各种各样的转换服务了
 			environment.setConversionService((ConfigurableConversionService) conversionService);
 		}
 		configurePropertySources(environment, args);
